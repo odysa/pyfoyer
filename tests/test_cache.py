@@ -1,4 +1,4 @@
-from pyfoyer import Cache
+from pyfoyer import Cache, CacheBuilder
 
 
 def test_cache_insert():
@@ -46,3 +46,17 @@ def test_cache_usage():
         cache.insert(f"key_{i}".encode(), f"value_{i}".encode())
 
     assert cache.usage() == count
+
+
+def test_cache_shards():
+    count = 1000
+    for i in range(1, count):
+        cache = CacheBuilder(10).with_shards(i).build()
+        assert cache.shards() == i
+
+
+def test_cache_capacity():
+    count = 1000
+    for i in range(1, count):
+        cache = CacheBuilder(i).build()
+        assert cache.capacity() == i

@@ -159,10 +159,20 @@ impl PyEvictionConfig {
     }
 }
 
-#[pyclass]
+#[pyclass(name = "FifoConfig")]
 #[derive(Debug, Clone)]
 pub struct PyFifoConfig {
     inner: FifoConfig,
+}
+
+#[pymethods]
+impl PyFifoConfig {
+    #[new]
+    fn new() -> Self {
+        PyFifoConfig {
+            inner: FifoConfig::default(),
+        }
+    }
 }
 
 impl From<PyFifoConfig> for FifoConfig {
@@ -171,10 +181,47 @@ impl From<PyFifoConfig> for FifoConfig {
     }
 }
 
-#[pyclass]
+#[pyclass(name = "S3FifoConfig")]
 #[derive(Debug, Clone)]
 pub struct PyS3FifoConfig {
     inner: S3FifoConfig,
+}
+
+#[pymethods]
+impl PyS3FifoConfig {
+    #[new]
+    fn new(
+        small_queue_capacity_ratio: Option<f64>,
+        ghost_queue_capacity_ratio: Option<f64>,
+        small_to_main_freq_threshold: Option<u8>,
+    ) -> Self {
+        let mut inner = S3FifoConfig::default();
+        if let Some(small_queue_capacity_ratio) = small_queue_capacity_ratio {
+            inner.small_queue_capacity_ratio = small_queue_capacity_ratio;
+        }
+        if let Some(ghost_queue_capacity_ratio) = ghost_queue_capacity_ratio {
+            inner.ghost_queue_capacity_ratio = ghost_queue_capacity_ratio;
+        }
+        if let Some(small_to_main_freq_threshold) = small_to_main_freq_threshold {
+            inner.small_to_main_freq_threshold = small_to_main_freq_threshold;
+        }
+        PyS3FifoConfig { inner }
+    }
+
+    #[getter]
+    fn small_queue_capacity_ratio(&self) -> f64 {
+        self.inner.small_queue_capacity_ratio
+    }
+
+    #[getter]
+    fn ghost_queue_capacity_ratio(&self) -> f64 {
+        self.inner.ghost_queue_capacity_ratio
+    }
+
+    #[getter]
+    fn small_to_main_freq_threshold(&self) -> u8 {
+        self.inner.small_to_main_freq_threshold
+    }
 }
 
 impl From<PyS3FifoConfig> for S3FifoConfig {
@@ -183,10 +230,32 @@ impl From<PyS3FifoConfig> for S3FifoConfig {
     }
 }
 
-#[pyclass]
+#[pyclass(name = "LruConfig")]
 #[derive(Debug, Clone)]
 pub struct PyLruConfig {
     inner: LruConfig,
+}
+
+#[pymethods]
+impl PyLruConfig {
+    #[new]
+    fn new(high_priority_pool_ratio: Option<f64>) -> Self {
+        match high_priority_pool_ratio {
+            Some(high_priority_pool_ratio) => PyLruConfig {
+                inner: LruConfig {
+                    high_priority_pool_ratio,
+                },
+            },
+            None => PyLruConfig {
+                inner: LruConfig::default(),
+            },
+        }
+    }
+
+    #[getter]
+    fn high_priority_pool_ratio(&self) -> f64 {
+        self.inner.high_priority_pool_ratio
+    }
 }
 
 impl From<PyLruConfig> for LruConfig {
@@ -195,10 +264,56 @@ impl From<PyLruConfig> for LruConfig {
     }
 }
 
-#[pyclass]
+#[pyclass(name = "LfuConfig")]
 #[derive(Debug, Clone)]
 pub struct PyLfuConfig {
     inner: LfuConfig,
+}
+
+#[pymethods]
+impl PyLfuConfig {
+    #[new]
+    fn new(
+        window_capacity_ratio: Option<f64>,
+        protected_capacity_ratio: Option<f64>,
+        cmsketch_eps: Option<f64>,
+        cmsketch_confidence: Option<f64>,
+    ) -> Self {
+        let mut inner = LfuConfig::default();
+        if let Some(window_capacity_ratio) = window_capacity_ratio {
+            inner.window_capacity_ratio = window_capacity_ratio;
+        }
+        if let Some(protected_capacity_ratio) = protected_capacity_ratio {
+            inner.protected_capacity_ratio = protected_capacity_ratio;
+        }
+        if let Some(cmsketch_eps) = cmsketch_eps {
+            inner.cmsketch_eps = cmsketch_eps;
+        }
+        if let Some(cmsketch_confidence) = cmsketch_confidence {
+            inner.cmsketch_confidence = cmsketch_confidence;
+        }
+        PyLfuConfig { inner }
+    }
+
+    #[getter]
+    fn window_capacity_ratio(&self) -> f64 {
+        self.inner.window_capacity_ratio
+    }
+
+    #[getter]
+    fn protected_capacity_ratio(&self) -> f64 {
+        self.inner.protected_capacity_ratio
+    }
+
+    #[getter]
+    fn cmsketch_eps(&self) -> f64 {
+        self.inner.cmsketch_eps
+    }
+
+    #[getter]
+    fn cmsketch_confidence(&self) -> f64 {
+        self.inner.cmsketch_confidence
+    }
 }
 
 impl From<PyLfuConfig> for LfuConfig {
