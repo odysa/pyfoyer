@@ -1,5 +1,8 @@
 use bytes::Bytes;
-use foyer::{Cache, CacheBuilder, CacheEntry, DefaultHasher};
+use foyer::{
+    Cache, CacheBuilder, CacheEntry, DefaultHasher, EvictionConfig, FifoConfig, LfuConfig,
+    LruConfig, S3FifoConfig,
+};
 use pyo3::{exceptions::PyValueError, prelude::*, types::PyBytes, Bound};
 
 /// A Python module implemented in Rust.
@@ -8,6 +11,11 @@ fn pyfoyer(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyCache>()?;
     m.add_class::<PyCacheBuilder>()?;
     m.add_class::<PyCacheEntry>()?;
+    m.add_class::<PyEvictionConfig>()?;
+    m.add_class::<PyFifoConfig>()?;
+    m.add_class::<PyS3FifoConfig>()?;
+    m.add_class::<PyLruConfig>()?;
+    m.add_class::<PyLfuConfig>()?;
     Ok(())
 }
 
@@ -104,17 +112,104 @@ impl PyCache {
     }
 }
 
-struct CacheBuilderInner(CacheBuilder<Bytes, Bytes, DefaultHasher>);
+#[pyclass(name = "EvictionConfig", frozen)]
+#[derive(Clone)]
+pub struct PyEvictionConfig {
+    inner: EvictionConfig,
+}
 
-impl Default for CacheBuilderInner {
-    fn default() -> Self {
-        CacheBuilderInner(CacheBuilder::new(1000))
+impl From<PyEvictionConfig> for EvictionConfig {
+    fn from(cfg: PyEvictionConfig) -> Self {
+        cfg.inner
+    }
+}
+
+#[pymethods]
+impl PyEvictionConfig {
+    #[staticmethod]
+    pub fn fifo(cfg: PyFifoConfig) -> Self {
+        PyEvictionConfig {
+            inner: EvictionConfig::Fifo(cfg.into()),
+        }
+    }
+
+    #[staticmethod]
+    pub fn s3fifo(cfg: PyS3FifoConfig) -> Self {
+        PyEvictionConfig {
+            inner: EvictionConfig::S3Fifo(cfg.into()),
+        }
+    }
+
+    #[staticmethod]
+    pub fn lru(cfg: PyLruConfig) -> Self {
+        PyEvictionConfig {
+            inner: EvictionConfig::Lru(cfg.into()),
+        }
+    }
+
+    #[staticmethod]
+    pub fn lfu(cfg: PyLfuConfig) -> Self {
+        PyEvictionConfig {
+            inner: EvictionConfig::Lfu(cfg.into()),
+        }
+    }
+
+    pub fn __repr__(&self) -> String {
+        format!("{:?}", self.inner)
+    }
+}
+
+#[pyclass]
+#[derive(Debug, Clone)]
+pub struct PyFifoConfig {
+    inner: FifoConfig,
+}
+
+impl From<PyFifoConfig> for FifoConfig {
+    fn from(cfg: PyFifoConfig) -> Self {
+        cfg.inner
+    }
+}
+
+#[pyclass]
+#[derive(Debug, Clone)]
+pub struct PyS3FifoConfig {
+    inner: S3FifoConfig,
+}
+
+impl From<PyS3FifoConfig> for S3FifoConfig {
+    fn from(cfg: PyS3FifoConfig) -> Self {
+        cfg.inner
+    }
+}
+
+#[pyclass]
+#[derive(Debug, Clone)]
+pub struct PyLruConfig {
+    inner: LruConfig,
+}
+
+impl From<PyLruConfig> for LruConfig {
+    fn from(cfg: PyLruConfig) -> Self {
+        cfg.inner
+    }
+}
+
+#[pyclass]
+#[derive(Debug, Clone)]
+pub struct PyLfuConfig {
+    inner: LfuConfig,
+}
+
+impl From<PyLfuConfig> for LfuConfig {
+    fn from(cfg: PyLfuConfig) -> Self {
+        cfg.inner
     }
 }
 
 #[pyclass(name = "CacheBuilder")]
 pub struct PyCacheBuilder {
-    builder: CacheBuilderInner,
+    builder: Option<CacheBuilder<Bytes, Bytes, DefaultHasher>>,
 }
 
 #[pymethods]
@@ -122,7 +217,7 @@ impl PyCacheBuilder {
     #[new]
     fn new(capacity: usize) -> Self {
         PyCacheBuilder {
-            builder: CacheBuilderInner(CacheBuilder::new(capacity)),
+            builder: Some(CacheBuilder::new(capacity)),
         }
     }
 
@@ -131,9 +226,12 @@ impl PyCacheBuilder {
         _py: Python<'py>,
         name: String,
     ) -> PyRefMut<'py, Self> {
-        let inner = std::mem::take(&mut slf.builder);
-        let inner = inner.0.with_name(name);
-        slf.builder = CacheBuilderInner(inner);
+        slf.builder = Some(
+            slf.builder
+                .take()
+                .expect("Builder not initialized")
+                .with_name(name),
+        );
         slf
     }
 
@@ -142,16 +240,40 @@ impl PyCacheBuilder {
         _py: Python<'py>,
         shards: usize,
     ) -> PyRefMut<'py, Self> {
-        let inner = std::mem::take(&mut slf.builder);
-        let inner = inner.0.with_shards(shards);
-        slf.builder = CacheBuilderInner(inner);
+        slf.builder = Some(
+            slf.builder
+                .take()
+                .expect("Builder not initialized")
+                .with_shards(shards),
+        );
         slf
     }
 
-    fn build<'py>(mut slf: PyRefMut<'py, Self>) -> PyResult<Py<PyCache>> {
-        let builder = std::mem::take(&mut slf.builder);
-        let cache = builder.0.build();
-        let py_cache = PyCache { cache };
-        Python::with_gil(|py| Py::new(py, py_cache))
+    fn with_eviction_config<'py>(
+        mut slf: PyRefMut<'py, Self>,
+        _py: Python<'py>,
+        eviction_config: Bound<'py, PyEvictionConfig>,
+    ) -> PyRefMut<'py, Self> {
+        let eviction_config = eviction_config.get().inner.clone();
+
+        let builder = slf
+            .builder
+            .take()
+            .expect("Builder not initialized")
+            .with_eviction_config(eviction_config);
+
+        slf.builder = Some(builder);
+        slf
+    }
+
+    fn build<'py>(mut slf: PyRefMut<'py, Self>, _py: Python<'py>) -> PyResult<Py<PyCache>> {
+        Python::with_gil(|py| {
+            Py::new(
+                py,
+                PyCache {
+                    cache: slf.builder.take().expect("Builder not initialized").build(),
+                },
+            )
+        })
     }
 }
